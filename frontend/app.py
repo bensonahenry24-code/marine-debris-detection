@@ -3,27 +3,37 @@ import requests
 from PIL import Image, ImageDraw
 
 # -----------------------------
-# PAGE SETTINGS
+# PAGE CONFIG
 # -----------------------------
 
 st.set_page_config(
     page_title="Marine Debris Detection",
-    page_icon="🌊",
+    page_icon="",
     layout="wide"
 )
 
-st.title("🌊 Marine Debris Detection")
-st.write(
-    "AI-powered detection of underwater objects from "
-    "Side-Scan Sonar imagery."
+# -----------------------------
+# HEADER
+# -----------------------------
+
+st.title(" Marine Debris Detection")
+st.markdown(
+    "### AI-powered Side-Scan Sonar Analysis"
 )
 
+st.write(
+    "Upload a Side-Scan Sonar image to detect underwater "
+    "objects and flag low-confidence anomalies for human review."
+)
+
+st.divider()
+
 # -----------------------------
-# IMAGE UPLOAD
+# UPLOAD
 # -----------------------------
 
 uploaded_file = st.file_uploader(
-    "Upload Side-Scan Sonar Image",
+    "📤 Upload Side-Scan Sonar Image",
     type=["jpg", "jpeg", "png"]
 )
 
@@ -31,14 +41,15 @@ if uploaded_file is not None:
 
     image = Image.open(uploaded_file).convert("RGB")
 
-    st.subheader("Uploaded Sonar Image")
-    st.image(image, use_container_width=True)
+    st.subheader("Input Image")
 
-    # -----------------------------
-    # DETECTION BUTTON
-    # -----------------------------
+    st.image(
+        image,
+        caption=uploaded_file.name,
+        use_container_width=True
+    )
 
-    if st.button("🔍 Detect Objects"):
+    if st.button("🔍 Analyze Sonar Image", use_container_width=True):
 
         files = {
             "file": (
@@ -58,17 +69,17 @@ if uploaded_file is not None:
             if response.status_code == 200:
 
                 result = response.json()
-
                 detections = result["detections"]
 
                 # -----------------------------
-                # DRAW BOXES
+                # DRAW DETECTIONS
                 # -----------------------------
 
                 annotated_image = image.copy()
                 draw = ImageDraw.Draw(annotated_image)
 
-                anomaly_found = False
+                anomaly_count = 0
+                total_confidence = 0
 
                 for detection in detections:
 
@@ -80,11 +91,16 @@ if uploaded_file is not None:
                     width = detection["width"]
                     height = detection["height"]
 
-                    # Anomaly rule
+                    total_confidence += confidence
+
+                    # Low confidence = anomaly
                     if confidence < 0.40:
-                        anomaly_found = True
+
                         label = "ANOMALY"
+                        anomaly_count += 1
+
                     else:
+
                         label = object_class.upper()
 
                     # Bounding box
@@ -106,26 +122,51 @@ if uploaded_file is not None:
                     )
 
                 # -----------------------------
-                # DISPLAY RESULT
+                # METRICS
                 # -----------------------------
 
-                st.subheader("🎯 Detection Results")
+                detection_count = len(detections)
 
-                st.image(
-                    annotated_image,
-                    caption="Detected objects",
-                    use_container_width=True
-                )
+                if detection_count > 0:
+                    average_confidence = (
+                        total_confidence / detection_count
+                    ) * 100
+                else:
+                    average_confidence = 0
+
+                st.divider()
+
+                st.subheader("📊 Analysis Summary")
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric(
+                        "Objects Detected",
+                        detection_count
+                    )
+
+                with col2:
+                    st.metric(
+                        "Average Confidence",
+                        f"{average_confidence:.0f}%"
+                    )
+
+                with col3:
+                    st.metric(
+                        "Anomalies",
+                        anomaly_count
+                    )
 
                 # -----------------------------
                 # ANOMALY WARNING
                 # -----------------------------
 
-                if anomaly_found:
+                if anomaly_count > 0:
 
                     st.warning(
-                        "⚠️ ANOMALY DETECTED — "
-                        "Low-confidence object requires human review."
+                        f"⚠️ {anomaly_count} low-confidence "
+                        "object(s) flagged for human review."
                     )
 
                 else:
@@ -135,12 +176,24 @@ if uploaded_file is not None:
                     )
 
                 # -----------------------------
-                # RESULT SUMMARY
+                # ANNOTATED IMAGE
                 # -----------------------------
 
-                st.subheader("📊 Detection Summary")
+                st.subheader(" Detection Result")
 
-                for detection in detections:
+                st.image(
+                    annotated_image,
+                    caption="Detected objects and anomalies",
+                    use_container_width=True
+                )
+
+                # -----------------------------
+                # DETAILS
+                # -----------------------------
+
+                st.subheader("Detection Details")
+
+                for i, detection in enumerate(detections, 1):
 
                     object_class = detection["class"]
                     confidence = detection["confidence"]
@@ -148,20 +201,23 @@ if uploaded_file is not None:
                     if confidence < 0.40:
 
                         st.write(
-                            f"⚠️ **ANOMALY** — "
+                            f"⚠️ **Object {i}: ANOMALY** — "
                             f"{confidence * 100:.0f}% confidence"
                         )
 
                     else:
 
                         st.write(
-                            f"✅ **{object_class.upper()}** — "
+                            f"✅ **Object {i}: "
+                            f"{object_class.upper()}** — "
                             f"{confidence * 100:.0f}% confidence"
                         )
 
             else:
 
-                st.error("Detection API returned an error.")
+                st.error(
+                    "❌ Detection API returned an error."
+                )
 
         except requests.exceptions.ConnectionError:
 
